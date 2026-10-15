@@ -1,0 +1,14 @@
+{
+  "name": "aeroclub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestion des baptêmes de l'air et du suivi des élèves PPL d'un aéroclub",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply aeroclub --local"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

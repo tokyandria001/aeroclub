@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baptême de l'air — Aéroclub</title>
+  <meta name="description" content="Demandez votre baptême de l'air : un premier vol aux côtés d'un pilote de l'aéroclub.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-contenu">
+      <div class="surtitre">Aéroclub · Baptême de l'air</div>
+      <h1>Votre premier vol,<br>aux commandes du ciel.</h1>
+      <p>Embarquez avec un pilote du club pour découvrir la région vue d'en haut. Laissez-nous vos coordonnées, nous vous rappelons pour fixer la date.</p>
+      <div class="faits">
+        <span>Jusqu'à 3 passagers</span>
+        <span>Vol d'environ 30 minutes</span>
+        <span>Possible en bon cadeau</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="formulaire-public">
+    <h2>Demander un baptême</h2>
+    <form id="demande" novalidate>
+      <div class="grille">
+        <div><label for="prenom">Prénom *</label><input id="prenom" name="prenom" autocomplete="given-name" required maxlength="100"></div>
+        <div><label for="nom">Nom *</label><input id="nom" name="nom" autocomplete="family-name" required maxlength="100"></div>
+        <div><label for="email">Email *</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="200"></div>
+        <div><label for="telephone">Téléphone *</label><input id="telephone" name="telephone" type="tel" autocomplete="tel" required maxlength="30"></div>
+        <div>
+          <label for="nb_passagers">Nombre de passagers *</label>
+          <select id="nb_passagers" name="nb_passagers">
+            <option value="1">1 passager</option>
+            <option value="2">2 passagers</option>
+            <option value="3">3 passagers</option>
+          </select>
+        </div>
+        <div>
+          <label for="poids_total_kg">Poids total des passagers (kg) <span class="aide">— pour le centrage de l'avion</span></label>
+          <input id="poids_total_kg" name="poids_total_kg" type="number" min="1" max="400" inputmode="numeric">
+        </div>
+        <div class="large">
+          <label for="periode_souhaitee">Période souhaitée</label>
+          <input id="periode_souhaitee" name="periode_souhaitee" maxlength="200" placeholder="Ex. : un samedi matin en mai, ou dès que possible">
+        </div>
+        <div class="large">
+          <label for="message">Message</label>
+          <textarea id="message" name="message" maxlength="2000" placeholder="Occasion particulière, bon cadeau, questions…"></textarea>
+        </div>
+        <div class="piege" aria-hidden="true">
+          <label for="site_web">Ne pas remplir</label><input id="site_web" name="site_web" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="large">
+          <label class="case"><input type="checkbox" name="consentement" required>
+            <span>J'accepte que l'aéroclub utilise ces informations pour me recontacter au sujet de ma demande. Elles ne sont jamais transmises à des tiers.</span>
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:1.4rem"><button class="btn" type="submit">Envoyer ma demande</button></div>
+      <div id="retour" class="message" role="status"></div>
+    </form>
+  </section>
+
+  <p class="pied">Aéroclub · <a href="/admin/">Espace club</a></p>
+
+  <script>
+    const form = document.getElementById("demande");
+    const retour = document.getElementById("retour");
+    function afficher(type, texte) { retour.className = "message visible " + type; retour.textContent = texte; }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const data = Object.fromEntries(new FormData(form));
+      data.consentement = form.consentement.checked;
+      const bouton = form.querySelector("button");
+      bouton.disabled = true;
+      try {
+        const r = await fetch("/api/baptemes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+        const res = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(res.erreur || "Envoi impossible");
+        form.reset();
+        afficher("ok", "Merci ! Votre demande est bien enregistrée. Un membre du club vous recontacte rapidement.");
+      } catch (err) {
+        afficher("erreur", err.message + ". Vous pouvez réessayer dans un instant.");
+      } finally {
+        bouton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

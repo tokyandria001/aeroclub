@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Espace club — Aéroclub</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Connexion -->
+  <section id="ecran-connexion" class="connexion" hidden>
+    <h1>Espace club</h1>
+    <p class="aide" id="info-connexion">Accès réservé au bureau et aux instructeurs.</p>
+    <form id="form-connexion">
+      <label for="password">Mot de passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <div style="margin-top:1rem"><button class="btn" type="submit">Se connecter</button></div>
+      <div id="erreur-connexion" class="message erreur" role="alert"></div>
+    </form>
+  </section>
+
+  <!-- Application -->
+  <div id="ecran-app" hidden>
+    <nav class="barre">
+      <strong>✈ Aéroclub</strong>
+      <div class="onglets" role="tablist">
+        <button role="tab" data-onglet="accueil" aria-selected="true">Tableau de bord</button>
+        <button role="tab" data-onglet="baptemes">Baptêmes</button>
+        <button role="tab" data-onglet="eleves">Élèves PPL</button>
+        <button role="tab" data-onglet="equipe">Instructeurs &amp; avions</button>
+      </div>
+      <button class="btn secondaire petit" id="deconnexion">Déconnexion</button>
+    </nav>
+    <main class="admin" id="contenu"></main>
+  </div>
+
+  <dialog id="modale"><form method="dialog" id="form-modale"></form></dialog>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>
