@@ -214,6 +214,79 @@ function cookieSession(valeur, maxAge) {
   return `session=${valeur}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
 }
 
+// ---------- Emails (Brevo) ----------
+// Secrets : BREVO_API_KEY, EMAIL_EXPEDITEUR (adresse validée dans Brevo), EMAIL_CLUB (reçoit les notifications).
+// Variable facultative : NOM_CLUB. Sans clé Brevo, aucun email n'est envoyé.
+
+const echapper = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function envoyerEmail(env, { a, sujet, html, repondreA }) {
+  const corps = {
+    sender: { name: env.NOM_CLUB || "Aéroclub", email: env.EMAIL_EXPEDITEUR },
+    to: [a],
+    subject: sujet,
+    htmlContent: html,
+  };
+  if (repondreA && repondreA.email) corps.replyTo = repondreA;
+  const r = await fetch(env.BREVO_API_URL || "https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": env.BREVO_API_KEY, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(corps),
+  });
+  if (!r.ok) console.error("Brevo", r.status, await r.text());
+}
+
+function gabarit(nomClub, titre, contenu) {
+  return `<!doctype html><html><body style="margin:0;background:#f6f3ec;font-family:Arial,sans-serif;color:#13233a">
+  <div style="max-width:560px;margin:0 auto;padding:24px">
+    <div style="background:#13233a;color:#fff;padding:18px 22px;border-radius:10px 10px 0 0;font-weight:bold">✈ ${echapper(nomClub)}</div>
+    <div style="background:#fff;padding:22px;border-radius:0 0 10px 10px;line-height:1.5">
+      <h2 style="margin:0 0 12px;font-size:20px">${titre}</h2>${contenu}
+    </div>
+  </div></body></html>`;
+}
+
+async function emailsNouvelleDemande(env, b, origine) {
+  if (!env.BREVO_API_KEY || !env.EMAIL_EXPEDITEUR) return;
+  // Garde-fou anti-abus : limite les envois par adresse et par jour (reste bien sous le quota gratuit Brevo).
+  const compte = await env.DB.prepare(
+    `SELECT SUM(email = ?) AS meme_adresse, COUNT(*) AS total FROM baptemes WHERE cree_le >= datetime('now','-1 day')`
+  ).bind(b.email).first();
+  if (compte.total > 60) return console.warn("Trop de demandes aujourd'hui : emails suspendus");
+  const confirmerAuDemandeur = compte.meme_adresse <= 2;
+  const nomClub = env.NOM_CLUB || "Aéroclub";
+  const nom = `${b.prenom} ${b.nom}`;
+  const ligne = (libelle, valeur) => (valeur ? `<tr><td style="padding:4px 12px 4px 0;color:#4a5b72">${libelle}</td><td style="padding:4px 0">${echapper(valeur)}</td></tr>` : "");
+  const details = `<table style="border-collapse:collapse;font-size:15px">
+      ${ligne("Nom", nom)}${ligne("Téléphone", b.telephone)}${ligne("Email", b.email)}
+      ${ligne("Passagers", String(b.nb_passagers))}${ligne("Poids total", b.poids_total_kg ? b.poids_total_kg + " kg" : "")}
+      ${ligne("Période souhaitée", b.periode_souhaitee)}${ligne("Message", b.message)}
+    </table>`;
+
+  const envois = [];
+  if (env.EMAIL_CLUB) {
+    envois.push(envoyerEmail(env, {
+      a: { email: env.EMAIL_CLUB, name: nomClub },
+      sujet: `Nouvelle demande de baptême — ${nom}`,
+      repondreA: { email: b.email, name: nom },
+      html: gabarit(nomClub, "Nouvelle demande de baptême", `${details}
+        <p style="margin-top:18px"><a href="${origine}/admin/" style="background:#e8590c;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:bold">Ouvrir l'espace club</a></p>
+        <p style="color:#4a5b72;font-size:13px">Répondez directement à cet email pour écrire au demandeur.</p>`),
+    }));
+  }
+  if (confirmerAuDemandeur) envois.push(envoyerEmail(env, {
+    a: { email: b.email, name: nom },
+    sujet: `Votre demande de baptême de l'air — ${nomClub}`,
+    repondreA: env.EMAIL_CLUB ? { email: env.EMAIL_CLUB, name: nomClub } : null,
+    html: gabarit(nomClub, `Merci ${echapper(b.prenom)} !`, `
+      <p>Nous avons bien reçu votre demande de baptême de l'air. Un membre du club vous rappelle rapidement pour convenir d'une date.</p>
+      <p>Récapitulatif de votre demande :</p>${details}
+      <p style="color:#4a5b72;font-size:13px;margin-top:18px">Une question ? Répondez simplement à cet email.</p>`),
+  }));
+  const res = await Promise.allSettled(envois);
+  res.filter((x) => x.status === "rejected").forEach((x) => console.error("Email", x.reason));
+}
+
 // ---------- Routes ----------
 
 const routes = [];
@@ -223,7 +296,7 @@ const route = (methode, motif, handler, { public: estPublic = false } = {}) => {
 };
 
 // Public : demande de baptême
-route("POST", "/api/baptemes", async (req, env) => {
+route("POST", "/api/baptemes", async (req, env, _p, ctx) => {
   const data = await lireJson(req);
   if (data.site_web) return json({ ok: true }, 201); // piège à robots (champ caché)
   if (!data.consentement) throw new HttpError(400, "Merci d'accepter l'utilisation de vos données pour traiter la demande");
@@ -232,6 +305,8 @@ route("POST", "/api/baptemes", async (req, env) => {
   const valeurs = nettoyer("baptemes", filtre, false);
   if (!valeurs.telephone) throw new HttpError(400, "Téléphone : champ obligatoire");
   const ligne = await inserer(env, "baptemes", valeurs);
+  // Les emails partent en arrière-plan : la réponse au visiteur n'attend pas Brevo.
+  ctx.waitUntil(emailsNouvelleDemande(env, ligne, new URL(req.url).origin));
   return json({ ok: true, id: ligne.id }, 201);
 }, { public: true });
 
@@ -317,7 +392,7 @@ for (const table of ["instructeurs", "avions"]) {
 // ---------- Point d'entrée ----------
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return new Response("Page introuvable", { status: 404 });
 
@@ -327,7 +402,7 @@ export default {
         const m = url.pathname.match(r.re);
         if (!m) continue;
         if (!r.estPublic && !(await sessionValide(request, env))) throw new HttpError(401, "Connexion requise");
-        return await r.handler(request, env, m.groups || {});
+        return await r.handler(request, env, m.groups || {}, ctx);
       }
       throw new HttpError(404, "Route inconnue");
     } catch (e) {

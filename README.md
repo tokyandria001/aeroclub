@@ -24,6 +24,21 @@ L'espace club est protégé par un mot de passe stocké dans le **secret** `ADMI
 (tableau de bord Cloudflare → Workers → aeroclub → Settings → Variables and Secrets).
 Tant qu'il n'est pas défini, l'espace club reste fermé.
 
+## Emails automatiques (Brevo, gratuit jusqu'à 300 emails/jour)
+
+À chaque demande de baptême : une notification au club et un accusé de réception au demandeur.
+Secrets à définir dans Cloudflare (même endroit que `ADMIN_PASSWORD`) :
+
+| Secret | Contenu |
+|---|---|
+| `BREVO_API_KEY` | Clé API Brevo (SMTP & API → API Keys) |
+| `EMAIL_EXPEDITEUR` | Adresse d'expédition **validée dans Brevo** (Senders) |
+| `EMAIL_CLUB` | Adresse qui reçoit les notifications de nouvelles demandes |
+| `NOM_CLUB` *(facultatif)* | Nom affiché comme expéditeur |
+
+Sans `BREVO_API_KEY`, aucun email n'est envoyé. Garde-fous : au plus 2 accusés de réception par adresse
+et par 24 h, et plus aucun email au-delà de 60 demandes en 24 h.
+
 ## Développement local (facultatif)
 
 ```bash
